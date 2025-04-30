@@ -21,12 +21,20 @@ const config = {
   devtool: "source-map",
   output: {
     path: path.resolve(__dirname, "dist"),
+    clean: true,
   },
   devServer: {
     open: true,
     host: "localhost",
     watchFiles: ["src/pages/*.html"],
-    hot: true
+    hot: true,
+    proxy: {
+      '/api': {
+        target: process.env.API_ORIGIN,
+        changeOrigin: true,
+        pathRewrite: { '^/api': '' },
+      },
+    },
   },
   plugins: [
     new HtmlWebpackPlugin({
@@ -38,9 +46,10 @@ const config = {
     // Add your plugins here
     // Learn more about plugins from https://webpack.js.org/configuration/plugins/
     new DefinePlugin({
-      'process.env.DEVELOPMENT': !isProduction,
-      'process.env.API_ORIGIN': JSON.stringify(process.env.API_ORIGIN ?? '')
+      'process.env.API_PATH': JSON.stringify('/api'),
+      'process.env.CDN_PATH': JSON.stringify('/content')
     }),
+    
 
     new CopyWebpackPlugin({
       patterns: [
@@ -96,10 +105,7 @@ const config = {
 };
 
 module.exports = () => {
-  if (isProduction) {
-    config.mode = "production";
-  } else {
-    config.mode = "development";
-  }
+  config.mode = isProduction ? 'production' : 'development';
+  config.devtool = isProduction ? false : 'source-map';
   return config;
 };
