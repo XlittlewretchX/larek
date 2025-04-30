@@ -3,79 +3,92 @@
 const path = require("path");
 const HtmlWebpackPlugin = require("html-webpack-plugin");
 const MiniCssExtractPlugin = require("mini-css-extract-plugin");
-const { DefinePlugin } = require('webpack');
+const { DefinePlugin } = require("webpack");
 const TerserPlugin = require("terser-webpack-plugin");
+const CopyWebpackPlugin = require("copy-webpack-plugin");
 
-const CopyWebpackPlugin = require('copy-webpack-plugin');
-
-require('dotenv').config({
-  path: path.join(process.cwd(), process.env.NODE_ENV ? `.env.${process.env.NODE_ENV}` : '.env')
+// Подгружаем .env.development или .env.production
+require("dotenv").config({
+  path: path.join(
+    process.cwd(),
+    process.env.NODE_ENV === "production" ? ".env.production" : ".env.development"
+  ),
 });
 
-const isProduction = process.env.NODE_ENV == "production";
-
+const isProduction = process.env.NODE_ENV === "production";
 const stylesHandler = MiniCssExtractPlugin.loader;
 
 const config = {
   entry: "./src/index.ts",
-  devtool: "source-map",
   output: {
     path: path.resolve(__dirname, "dist"),
-    clean: true,
+    clean: true, // очищаем dist перед сборкой
   },
+  // В деве — source-map, в проде — без карт
+  devtool: isProduction ? false : "source-map",
   devServer: {
     open: true,
     host: "localhost",
-    watchFiles: ["src/pages/*.html"],
     hot: true,
+    watchFiles: ["src/pages/*.html"],
     proxy: {
-      '/api': {
+      // проксируем /api → реальный API_ORIGIN
+      "/api": {
         target: process.env.API_ORIGIN,
         changeOrigin: true,
-        pathRewrite: { '^/api': '' },
+        pathRewrite: { "^/api": "" },
+      },
+      // проксируем /content → реальный CDN-путь
+      "/content": {
+        target: process.env.API_ORIGIN,
+        changeOrigin: true,
+        pathRewrite: { "^/content": "/content" },
       },
     },
   },
   plugins: [
     new HtmlWebpackPlugin({
-      template: "src/pages/index.html"
+      template: "src/pages/index.html",
     }),
-
     new MiniCssExtractPlugin(),
-
-    // Add your plugins here
-    // Learn more about plugins from https://webpack.js.org/configuration/plugins/
     new DefinePlugin({
-      'process.env.API_PATH': JSON.stringify('/api'),
-      'process.env.CDN_PATH': JSON.stringify('/content')
+      // В деве — только относительные пути для прокси,
+      // в проде — абсолютные URL, подставленные из API_ORIGIN
+      "process.env.API_PATH": JSON.stringify(
+        isProduction ? `${process.env.API_ORIGIN}/api` : "/api"
+      ),
+      "process.env.CDN_PATH": JSON.stringify(
+        isProduction ? `${process.env.API_ORIGIN}/content` : "/content"
+      ),
     }),
-    
-
     new CopyWebpackPlugin({
-      patterns: [
-        { from: "src/images", to: "images" },
-      ],
-    })
-
+      patterns: [{ from: "src/images", to: "images" }],
+    }),
   ],
   module: {
     rules: [
       {
         test: /\.(ts|tsx)$/i,
         use: ["babel-loader", "ts-loader"],
-        exclude: ["/node_modules/"],
+        exclude: /node_modules/,
       },
       {
         test: /\.s[ac]ss$/i,
-        use: [stylesHandler, "css-loader", "postcss-loader", "resolve-url-loader", {
-          loader: "sass-loader",
-          options: {
-            sourceMap: true,
-            sassOptions: {
-              includePaths: ["src/scss"]
-            }
-          }
-        }],
+        use: [
+          stylesHandler,
+          "css-loader",
+          "postcss-loader",
+          "resolve-url-loader",
+          {
+            loader: "sass-loader",
+            options: {
+              sourceMap: true,
+              sassOptions: {
+                includePaths: ["src/scss"],
+              },
+            },
+          },
+        ],
       },
       {
         test: /\.css$/i,
@@ -85,9 +98,6 @@ const config = {
         test: /\.(eot|svg|ttf|woff|woff2|png|jpg|gif)$/i,
         type: "asset",
       },
-
-      // Add your rules for custom modules here
-      // Learn more about loaders from https://webpack.js.org/loaders/
     ],
   },
   resolve: {
@@ -95,17 +105,19 @@ const config = {
   },
   optimization: {
     minimize: true,
-    minimizer: [new TerserPlugin({
-      terserOptions: {
-        keep_classnames: true,
-        keep_fnames: true
-      }
-    })]
-  }
+    minimizer: [
+      new TerserPlugin({
+        terserOptions: {
+          keep_classnames: true,
+          keep_fnames: true,
+        },
+      }),
+    ],
+  },
 };
 
 module.exports = () => {
-  config.mode = isProduction ? 'production' : 'development';
-  config.devtool = isProduction ? false : 'source-map';
+  // Устанавливаем режим сборки
+  config.mode = isProduction ? "production" : "development";
   return config;
 };
